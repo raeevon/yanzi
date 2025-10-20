@@ -1,0 +1,10 @@
+[build]
+builder = "Docker"
+
+[deploy]
+startCommand = ""
+restartPolicyType = "on_failure"
+
+[service]
+internal_port = 8000
+healthcheck_path = "/health"
