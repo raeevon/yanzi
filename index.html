@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Меню Янцзы — заказ</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; margin: 0; padding: 16px; background:#fafafa; }
+    h1 { margin: 0 0 12px; font-size: 20px; }
+    .hint { color:#666; font-size: 12px; margin-bottom:12px; }
+    fieldset { border:1px solid #ddd; border-radius:10px; padding:10px; margin: 12px 0; background:#fff; }
+    legend { font-weight: 700; padding: 0 6px; }
+    .item-row { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px dashed #eee; }
+    .item-row:last-child { border-bottom:0; }
+    .name { flex: 1; }
+    .qty-box { display:flex; align-items:center; gap:6px; }
+    .btn { border:1px solid #ccc; background:#f7f7f7; border-radius:8px; padding:6px 10px; font-size:16px; min-width:36px; cursor:pointer; }
+    .qty { min-width:28px; text-align:center; font-variant-numeric: tabular-nums; }
+    .footer { position:sticky; bottom:0; background:#fafafa; padding-top:12px; }
+    .primary { width:100%; padding:12px 14px; font-size:16px; border-radius:10px; border:0; background:#2ea6ff; color:#fff; font-weight:700; cursor:pointer; }
+    .primary:disabled { opacity:.6; cursor:not-allowed; }
+    .totals { display:flex; justify-content:space-between; margin:10px 0; color:#333; }
+    .pill { background:#eee; border-radius:999px; padding:2px 8px; }
+  </style>
+</head>
+<body>
+  <h1>Форма выбора блюд Янцзы</h1>
+  <div class="hint">Нажимайте «+ / –» чтобы задать количество. «Отправить заказ» отправит только позиции &gt; 0.</div>
+
+  <div id="app"></div>
+
+  <div class="footer">
+    <div class="totals">
+      <div>Выбрано позиций: <span id="selCount" class="pill">0</span></div>
+      <div>Всего шт.: <span id="sumQty" class="pill">0</span></div>
+    </div>
+    <button id="submitBtn" class="primary" disabled>Отправить заказ</button>
+  </div>
+
+  <script>
+    // IMPORTANT: Telegram Web App API
+    // Telegram инжектит window.Telegram.WebApp в этот контекст
+    const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+    if (tg) {
+      tg.expand(); // развернуть на максимум
+      tg.MainButton.hide(); // используем свою кнопку
+      tg.setHeaderColor && tg.setHeaderColor('secondary_bg_color');
+      tg.setBackgroundColor && tg.setBackgroundColor('#fafafa');
+    }
+
+    // === ДАННЫЕ МЕНЮ ===
+    // Пример. Расширяйте списки по образцу. Каждая позиция: уникальный id (число), code (Категория_Индекс), category, name.
+    // Ниже — только несколько первых примеров из каждой категории для краткости.
+    const ITEMS = [
+      // Салаты
+      { id: 1001, code: "Салаты_0", category: "Салаты", name: "Ореховый" },
+      { id: 1002, code: "Салаты_1", category: "Салаты", name: "Тайский" },
+      { id: 1003, code: "Салаты_2", category: "Салаты", name: "Салат «Ен Янь»" },
+      // Горячее
+      { id: 2001, code: "Горячее_0", category: "Горячее", name: "Лю Жоу Тан" },
+      { id: 2002, code: "Горячее_1", category: "Горячее", name: "Кабан и желуди" },
+      { id: 2003, code: "Горячее_2", category: "Горячее", name: "Каштаны с курицей" },
+      // Супы
+      { id: 3001, code: "Супы_0", category: "Супы", name: "ТАН ФЕН" },
+      { id: 3002, code: "Супы_1", category: "Супы", name: "Том Ям с морепродуктами" },
+      { id: 3003, code: "Супы_2", category: "Супы", name: "Том Ям с курицей" },
+      // Десерты
+      { id: 4001, code: "Десерты_0", category: "Десерты", name: "Чизкейк" },
+      { id: 4002, code: "Десерты_1", category: "Десерты", name: "Пирог вишневый" },
+      // Пицца
+      { id: 5001, code: "Пицца_0", category: "Пицца", name: "Пицца «Маргарита классическая»" },
+      { id: 5002, code: "Пицца_1", category: "Пицца", name: "Пицца с языком" },
+      // Напитки
+      { id: 6001, code: "Напитки_0", category: "Напитки", name: "Вода" },
+      { id: 6002, code: "Напитки_1", category: "Напитки", name: "Морс натуральный в ассортименте" },
+      // Бизнес-ланч
+      { id: 7001, code: "Бизнес-ланч_0", category: "Бизнес-ланч", name: "Бизнес ланч №1" },
+      { id: 7002, code: "Бизнес-ланч_1", category: "Бизнес-ланч", name: "Бизнес ланч №2" },
+      // Подарочные сертификаты
+      { id: 8001, code: "Подарочные_сертификаты_0", category: "Подарочные сертификаты", name: "Подарочный сертификат" },
+      { id: 8002, code: "Подарочные_сертификаты_1", category: "Подарочные сертификаты", name: "Подарочный сертификат 1000 р." },
+    ];
+    // Подсказка: вы можете сгенерировать весь список программно из вашего исходного HTML (если нужно — накину скрипт-генератор).
+
+    // === РЕНДЕР ===
+    const state = new Map(); // key: id -> { ...item, qty }
+    ITEMS.forEach(it => state.set(it.id, {...it, qty: 0}));
+
+    const byCategory = ITEMS.reduce((acc, it) => {
+      (acc[it.category] ||= []).push(it);
+      return acc;
+    }, {});
+
+    const app = document.getElementById('app');
+
+    function render() {
+      app.innerHTML = '';
+      for (const [cat, arr] of Object.entries(byCategory)) {
+        const fs = document.createElement('fieldset');
+        const lg = document.createElement('legend');
+        lg.textContent = cat;
+        fs.appendChild(lg);
+
+        arr.forEach(it => {
+          const row = document.createElement('div');
+          row.className = 'item-row';
+
+          const name = document.createElement('div');
+          name.className = 'name';
+          name.textContent = it.name;
+
+          const box = document.createElement('div');
+          box.className = 'qty-box';
+
+          const minus = document.createElement('button');
+          minus.className = 'btn';
+          minus.type = 'button';
+          minus.textContent = '–';
+          minus.addEventListener('click', () => changeQty(it.id, -1));
+
+          const qty = document.createElement('div');
+          qty.className = 'qty';
+          qty.id = `qty_${it.id}`;
+          qty.textContent = '0';
+
+          const plus = document.createElement('button');
+          plus.className = 'btn';
+          plus.type = 'button';
+          plus.textContent = '+';
+          plus.addEventListener('click', () => changeQty(it.id, +1));
+
+          box.append(minus, qty, plus);
+          row.append(name, box);
+          fs.appendChild(row);
+        });
+
+        app.appendChild(fs);
+      }
+
+      updateTotals();
+    }
+
+    function changeQty(id, delta) {
+      const rec = state.get(id);
+      const next = Math.max(0, (rec.qty || 0) + delta);
+      rec.qty = next;
+      state.set(id, rec);
+      const el = document.getElementById(`qty_${id}`);
+      if (el) el.textContent = String(next);
+      updateTotals();
+    }
+
+    function updateTotals() {
+      let sel = 0, sum = 0;
+      state.forEach(v => { if (v.qty > 0) { sel += 1; sum += v.qty; } });
+      document.getElementById('selCount').textContent = String(sel);
+      document.getElementById('sumQty').textContent = String(sum);
+      document.getElementById('submitBtn').disabled = sel === 0;
+    }
+
+    // === SUBMIT ===
+    document.getElementById('submitBtn').addEventListener('click', () => {
+      const selected = [];
+      state.forEach(v => { if (v.qty > 0) selected.push({ id: v.id, code: v.code, category: v.category, name: v.name, qty: v.qty }); });
+
+      const payload = {
+        source: "yanzi_webapp",
+        selected,                 // массив позиций
+        selectedCount: selected.length,
+        totalQty: selected.reduce((a,b)=>a+b.qty,0),
+        ts: Date.now()
+      };
+
+      // Отправляем данные обратно в Telegram как web_app_data
+      if (tg) {
+        tg.sendData(JSON.stringify(payload));
+        tg.close(); // закрыть WebApp
+      } else {
+        alert('Данные (демо):\n' + JSON.stringify(payload, null, 2));
+      }
+    });
+
+    render();
+  </script>
+</body>
+</html>
